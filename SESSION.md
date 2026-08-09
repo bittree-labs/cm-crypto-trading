@@ -1,7 +1,8 @@
 # SESSION — sb01 crypto-trade
 
-> 最后提交：2026-08-09 10:45 | Agent: cw-sb01@M4-Pro  
-> 恢复：`git pull && 启动 sb01`，读取本文件即可接续
+> 最后提交：2026-08-09 21:37 | Agent: cw-sb01@M4-Pro  
+> 恢复命令：`启动 sb01`  
+> 恢复逻辑：`git pull` → 读 SESSION.md → 按流程启动
 
 ## 会话状态
 
