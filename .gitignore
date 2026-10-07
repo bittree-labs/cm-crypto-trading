@@ -11,3 +11,5 @@ vendor/
 execution/xt-java-demo/
 execution/xt-java-demo
 execution/kucoin-universal-sdk/
+safetrade/logs/
+safetrade/fills.jsonl
