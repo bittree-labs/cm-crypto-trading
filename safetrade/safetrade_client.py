@@ -75,11 +75,14 @@ class SafeTrade:
     """SafeTrade REST API v2 最小可用客户端。"""
 
     def __init__(self, key: str | None = None, secret: str | None = None,
-                 base_url: str = BASE_URL, timeout: int = 20):
+                 base_url: str = BASE_URL, timeout: int = 20,
+                 retries: int = 4, backoff: float = 2.0):
         self.base_url = base_url.rstrip("/")
         self.key = key if key is not None else os.environ.get("SAFETRADE_API_KEY", "")
         self.secret = secret if secret is not None else os.environ.get("SAFETRADE_API_SECRET", "")
         self.timeout = timeout
+        self.retries = max(1, retries)   # 403/429/5xx 时的退避重试次数
+        self.backoff = backoff           # 起始退避秒数（指数增长）
         if not _HAS_CURL_CFFI:
             print("[warn] 未安装 curl_cffi，退回 requests；Cloudflare 可能返回 403。"
                   "请执行: pip install curl_cffi", file=sys.stderr)
@@ -109,15 +112,31 @@ class SafeTrade:
             kwargs["params"] = params
         if body is not None:
             kwargs["json"] = body
-        resp = _http.request(method, url, **kwargs)
-        if resp.status_code >= 400:
-            raise SafeTradeError(resp.status_code, resp.text)
-        if not resp.text:
-            return None
-        try:
-            return resp.json()
-        except ValueError:
-            return resp.text
+        # Cloudflare 会限流：403/429/5xx 退避重试，别把请求打太密
+        last = None
+        for attempt in range(self.retries):
+            if auth:  # 每次重试都要重新签名（nonce 是时间戳，且防重放）
+                nonce = str(int(time.time() * 1000))
+                mac = hmac.new(self.secret.encode(), digestmod=hashlib.sha256)
+                mac.update((nonce + self.key).encode())
+                headers["X-Auth-Nonce"] = nonce
+                headers["X-Auth-Signature"] = binascii.hexlify(mac.digest()).decode()
+            resp = _http.request(method, url, **kwargs)
+            if resp.status_code >= 400 and (resp.status_code == 403 or resp.status_code == 429
+                                            or resp.status_code >= 500):
+                last = resp
+                time.sleep(self.backoff * (2 ** attempt))
+                continue
+            if resp.status_code >= 400:
+                raise SafeTradeError(resp.status_code, resp.text)
+            if not resp.text:
+                return None
+            try:
+                return resp.json()
+            except ValueError:
+                return resp.text
+        raise SafeTradeError(last.status_code if last else 0,
+                             (last.text if last else "request failed after retries"))
 
     # ---------- 公共行情 ----------
     def markets(self):

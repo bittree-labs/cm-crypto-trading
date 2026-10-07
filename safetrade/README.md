@@ -79,7 +79,8 @@ python3 sell_prl.py --live --slices 6 --floor 1.35 --interval 15 --timeout 180
 | `--floor` | 无 | 最低可接受价（USDT/PRL），低于则不卖 |
 | `--interval` | 15 | 片间隔秒 |
 | `--timeout` | 180 | 单片等待成交秒数，超时撤单 |
-| `--mode` | limit | `market` = 市价（需 `--max-slippage` 保护，慎用） |
+| `--mode` | limit | `limit`=贴 best_bid 吃单(taker)；`maker`=挂 best_ask 等成交（超时撤单）；`market`=市价（慎用） |
+| `--maker-fallback` | 关 | maker 模式超时未成交时，剩余量撤单后转 taker 吃单 |
 
 产物：`logs/sell_prl_YYYYMMDD.log`（人类可读）+ `fills.jsonl`（每片 JSON 记录，用于对账：PRL 数量 / 价 / 成交状态）。
 
@@ -142,7 +143,16 @@ launchctl bootout   gui/$(id -u)/com.bittree.safetrade.sellprl
 ```
 
 **maker = taker = 0.1%，全站统一一条规则，没有 VIP 档差 → 做 maker 省不了手续费。**
-实测核对：2 PRL @1.43 = 2.86 → 到手 2.85714（费 0.00286 = 0.1%，taker）；QUBIC 同样 0.1%。
+
+四路证据（2026-10-08）：
+
+1. `/trade/public/trading_fees` 只有一条规则：`maker 0.001 / taker 0.001`（`group=any, market_id=any`）。
+2. 每张订单实体都带 `maker_fee=0.001`、`taker_fee=0.001`（含你的历史挂单）。
+3. **你自己的挂单 3400@1.42（单号 702318305）是被买方分批"啃"掉的** —— 70.07 / 1099.85 / 722.37 /
+   176.06 / 1331.65… 多笔碎成交，典型 maker 成交形态 —— **每一笔费率都是 0.1000%**。
+4. 实盘 maker 测试：挂 2 PRL @1.45（挂单方）成交 → total 2.90、fee 0.0029 = **0.1000%**。
+
+taker 实测：2 PRL @1.43 → fee 0.00286 = 0.1%；QUBIC 同 0.1%。
 手续费按成交额扣在「你收到的那个币」上（卖单扣 USDT / 买单扣标的币）。
 
 所以 maker 与 taker 的差别只有**价格**和**确定性**，不是费率：

@@ -142,8 +142,12 @@ def sell_slice(client: SafeTrade, amount: Decimal, price: Decimal | None,
     filled = Decimal("0")
     state = None
     while time.time() < deadline:
-        time.sleep(5)
-        cur = client.order(oid)
+        time.sleep(10)  # 别把请求打太密（Cloudflare 限流 403）
+        try:
+            cur = client.order(oid)
+        except SafeTradeError as e:
+            log(f"  查询失败（重试中）: {e}")
+            continue
         filled = Decimal(str(cur.get("filled_amount") or 0))
         state = cur.get("state")
         if state in ("done", "cancel", "rejected"):
@@ -173,8 +177,10 @@ def main(argv=None) -> int:
     ap.add_argument("--floor", type=float, default=None, help="最低可接受价（USDT/PRL），低于不卖")
     ap.add_argument("--interval", type=int, default=15, help="片间隔秒数")
     ap.add_argument("--timeout", type=int, default=180, help="单片挂单等待成交秒数，超时撤单")
-    ap.add_argument("--mode", choices=["limit", "market"], default="limit",
-                    help="limit=按盘口限价吃单（默认）; market=市价（无价格保护，慎用）")
+    ap.add_argument("--mode", choices=["limit", "maker", "market"], default="limit",
+                    help="limit=按盘口限价吃单(taker,默认); maker=挂 best_ask 等成交; market=市价(慎用)")
+    ap.add_argument("--maker-fallback", action="store_true",
+                    help="maker 模式超时未成交时，剩余量撤单后转 taker 吃单")
     ap.add_argument("--max-slippage", type=float, default=0.05,
                     help="市价模式下滑点上限（相对 best_bid），超过则中止")
     args = ap.parse_args(argv)
@@ -245,6 +251,40 @@ def main(argv=None) -> int:
                 fh.write(json.dumps({"ts": datetime.now(timezone.utc).isoformat(),
                                      "mode": "market", **rec}, ensure_ascii=False) + "\n")
             time.sleep(args.interval)
+        return 0
+
+    if args.mode == "maker":
+        # 挂单方：不穿价差，挂在 best_ask 等买盘来吃；超时撤单；可选 fallback 转 taker
+        for i, p in enumerate(plan, 1):
+            amt = p["amount"]
+            bid_now, ask_now, _ = client.best_bid_ask(MARKET, depth_ok=5)
+            if ask_now is None:
+                log(f"  #{i} 无卖盘报价，跳过")
+                continue
+            price = q_price(ask_now if floor is None else max(ask_now, floor))
+            log(f"  #{i} maker：挂 {amt} PRL @ {price}（等 {args.timeout}s，超时撤单）")
+            rec = sell_slice(client, amt, price, args.timeout, True)
+            with open(FILL_LOG, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"ts": datetime.now(timezone.utc).isoformat(),
+                                     "mode": "maker", **rec}, ensure_ascii=False) + "\n")
+            filled = Decimal(str(rec.get("filled") or 0))
+            rest = q_amount(amt - filled)
+            if args.maker_fallback and rest >= MIN_AMOUNT:
+                bid2, _, _ = client.best_bid_ask(MARKET, depth_ok=5)
+                wp, est, _ = _walk(_levels(client), rest)
+                if wp is None or (bid2 is not None and wp < bid2):
+                    wp = bid2
+                if wp is not None and (floor is None or wp >= floor):
+                    log(f"  #{i} maker 剩 {rest} 未成交 → taker 吃单 @ {q_price(wp)}")
+                    rec2 = sell_slice(client, rest, q_price(wp), args.timeout, True)
+                    with open(FILL_LOG, "a", encoding="utf-8") as fh:
+                        fh.write(json.dumps({"ts": datetime.now(timezone.utc).isoformat(),
+                                             "mode": "maker-fallback-taker", **rec2},
+                                            ensure_ascii=False) + "\n")
+                else:
+                    log(f"  #{i} 剩余 {rest} 低于 floor，不转 taker")
+            time.sleep(args.interval)
+        log("执行结束。核对：python3 safetrade_client.py balance / orders")
         return 0
 
     for i, p in enumerate(plan, 1):
