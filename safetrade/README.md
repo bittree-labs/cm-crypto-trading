@@ -116,7 +116,40 @@ crontab（Mac / Linux）：
 - `sell_prl.py` 默认 dry-run；`--live` 必须显式写。
 - 先小量试跑（例如 `--amount 100 --live --slices 1`）确认整条链路，再放全量。
 
-## 6. 现状 / 待办
+## 6. 费率（2026-10-08 实测）
+
+### 现货交易费（`GET /trade/public/trading_fees`）
+
+```json
+[{"group":"any","market_id":"any","maker":"0.001","taker":"0.001"}]
+```
+
+**maker = taker = 0.1%，全站统一一条规则，没有 VIP 档差 → 做 maker 省不了手续费。**
+实测核对：2 PRL @1.43 = 2.86 → 到手 2.85714（费 0.00286 = 0.1%，taker）；QUBIC 同样 0.1%。
+手续费按成交额扣在「你收到的那个币」上（卖单扣 USDT / 买单扣标的币）。
+
+所以 maker 与 taker 的差别只有**价格**和**确定性**，不是费率：
+- **taker（本脚本默认）**：贴 best_bid 直接吃 → 一定卖掉，成交价 = 当时买一
+- **maker**：挂 best_ask 等买盘来吃 → 可能多卖 1 tick（0.01/枚），但可能等不到（= 没卖掉）
+
+盘口一档通常几千枚，20 枚的量吃单冲击可忽略 → 默认 taker，确定性优先。
+
+### 提现费（`GET /trade/public/currencies` → `networks[].withdraw_fee`）
+
+| 币 | 网络 | 提现费 | 最小提现 | 可提现 |
+|---|---|---|---|---|
+| PRL | Pearl | **0.01 PRL** | 1 PRL | ✅ |
+| USDT | BSC | 1 | 2 | ✅ |
+| USDT | Solana | 1 | 2 | ✅ |
+| USDT | ERC20 | 3 | 50 | ✅ |
+| USDT | Base / Tron / Avalanche / Arbitrum | 1 | 1~10 | ❌ 暂停 |
+| USDT | Polygon | 2 | 5 | ❌ 暂停 |
+| USDC | Base / ERC20 / Arbitrum | 3~7 | 0~50 | ✅ |
+
+> 交易费和提现费是两笔：卖币扣 0.1% 交易费；把钱提出交易所再扣一笔提现费（PRL 提现仅 0.01 PRL，
+> 这就是之前"代出"账单里被扣掉的那几 u 的来源之一）。
+
+## 7. 现状 / 待办
 
 - [x] 确认 API 支持挂单 → 已实测端点存在且签名头被解析
 - [x] 运行宿主定为 **Mac（VPN 常开）**；ya/ya2 集群不参与卖币
