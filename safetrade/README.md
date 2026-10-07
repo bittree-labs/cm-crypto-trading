@@ -97,17 +97,34 @@ python3 sell_prl.py --live --pct 20 --max-per-run 20 --slices 2 --floor 1.30
 - `--max-per-run` 是防呆闸：万一天可用量突然变大，也不会被一次卖光。
 - `--floor` 是价格保护：执行时按最新盘口重算，最差价低于 floor 就这一片不卖。
 
-## 4. 定时任务（每天固定时间卖）
+## 4. 定时任务（策略1，已上线）
 
-crontab（Mac / Linux）：
+**策略1（简单版）**：每天 **12:00** 卖 **10 枚 PRL**，只卖不买，永不一次卖光。
 
-```cron
-# 每天 10:07 卖币，每片间隔 15s，最低价 1.35
-7 10 * * * cd ~/workspace/bittree-labs/cm-crypto-trading/safetrade && \
-  /usr/bin/python3 sell_prl.py --live --slices 6 --floor 1.35 >> logs/cron.log 2>&1
+| 项 | 值 |
+|---|---|
+| 执行体 | `run_sell_prl.sh`（无参数 = `--live --amount 10 --slices 1`） |
+| 调度器 | launchd `com.bittree.safetrade.sellprl`（`StartCalendarInterval` 12:00；Mac 睡过点后唤醒会补跑） |
+| 日志 | `logs/cron.log`（脚本输出）、`logs/launchd.err.log`（launchd 层错误） |
+| 前置 | Mac 醒着 + VPN 常开（脚本出口） |
+
+```bash
+# 安装（换机器时照做）
+cp launchd/com.bittree.safetrade.sellprl.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.bittree.safetrade.sellprl.plist
+
+# 查看 / 手动触发 / 停用
+launchctl list | grep safetrade
+launchctl kickstart -p gui/$(id -u)/com.bittree.safetrade.sellprl
+launchctl bootout   gui/$(id -u)/com.bittree.safetrade.sellprl
+
+# 手动跑（等价于定时任务的动作）
+./run_sell_prl.sh              # 真实卖 10 枚
+./run_sell_prl.sh --dry-run    # 只看计划
 ```
 
-或用 Hermes 的 cronjob（可带 Telegram 通知）：让 agent 建一个每天定时跑上面的命令、并把 `fills.jsonl` 末尾几行推送出来的任务。
+**策略2（参数化版，未挂定时）**：`--pct / --max-per-run / --reserve / --floor / --mode` 那一套，
+按需手动跑或另挂调度，与策略1互不影响（脚本每次只动它自己那一单）。
 
 ## 5. 安全约定
 

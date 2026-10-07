@@ -13,3 +13,5 @@ execution/xt-java-demo
 execution/kucoin-universal-sdk/
 safetrade/logs/
 safetrade/fills.jsonl
+safetrade/venv/
+safetrade/__pycache__/

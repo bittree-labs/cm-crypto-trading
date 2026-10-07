@@ -188,7 +188,13 @@ def main(argv=None) -> int:
 
     if args.amount is not None:
         total = q_amount(Decimal(str(args.amount)))
-        log(f"本次指定卖出 {total} PRL")
+        if client.key:  # 有 Key：按可用量兜底，避免可用不足导致下单被拒
+            free = Decimal(str(client.balance_of("prl").get("available") or 0))
+            cap = q_amount(max(free - Decimal(str(args.reserve)), Decimal("0")))
+            if cap < total:
+                log(f"指定卖出 {total} PRL，但可用仅 {free}（底仓 {args.reserve}）→ 实际卖 {cap} PRL")
+                total = cap
+        log(f"本次卖出 {total} PRL")
     else:
         if not client.key:
             log("[error] 未指定 --amount 且无 API Key，读不到余额。"

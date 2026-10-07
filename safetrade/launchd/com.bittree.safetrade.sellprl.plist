@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bittree.safetrade.sellprl</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/bittree/workspace/bittree-labs/cm-crypto-trading/safetrade/run_sell_prl.sh</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/bittree/workspace/bittree-labs/cm-crypto-trading/safetrade</string>
+    <!-- 策略1：每天 12:00 卖 10 枚 PRL。Mac 睡过点，唤醒后 launchd 会补跑 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>12</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/bittree/workspace/bittree-labs/cm-crypto-trading/safetrade/logs/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/bittree/workspace/bittree-labs/cm-crypto-trading/safetrade/logs/launchd.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>LANG</key>
+        <string>en_US.UTF-8</string>
+    </dict>
+</dict>
+</plist>
