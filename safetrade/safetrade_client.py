@@ -152,11 +152,21 @@ class SafeTrade:
         return self._request("GET", "/trade/account/balances/spot", auth=True)
 
     def balance_of(self, currency: str) -> dict:
+        """单个币种余额。
+
+        注意：接口返回里 `balance` 就是「可用(free)」，`locked` 是挂单冻结量，
+        没有 `available` 字段；这里补出 available/total 方便脚本用。
+        """
         cur = currency.lower()
         for row in self.balances_spot() or []:
             if str(row.get("currency", "")).lower() == cur:
-                return row
-        return {"currency": cur, "balance": 0, "locked": 0, "available": 0}
+                free = Decimal(str(row.get("balance") or 0))
+                locked = Decimal(str(row.get("locked") or 0))
+                out = dict(row)
+                out["available"] = str(free)
+                out["total"] = str(free + locked)
+                return out
+        return {"currency": cur, "balance": "0", "locked": "0", "available": "0", "total": "0"}
 
     def orders(self, market: str | None = None, state=None, limit: int = 100):
         params: dict = {"limit": limit, "page": 1}
@@ -224,10 +234,13 @@ def _cmd(args):
     elif args.cmd == "me":
         print(json.dumps(c.me(), indent=1, ensure_ascii=False))
     elif args.cmd == "balance":
-        for row in sorted(c.balances_spot() or [], key=lambda r: str(r.get("currency"))):
-            if Decimal(str(row.get("balance") or 0)) > 0:
-                print(f"{row.get('currency'):>8}  balance={row.get('balance')} "
-                      f"locked={row.get('locked')} available={row.get('available')}")
+        rows = sorted(c.balances_spot() or [], key=lambda r: str(r.get("currency")))
+        print(f"{'币种':<8}{'可用(可卖)':>22}{'挂单冻结':>16}")
+        for row in rows:
+            free = Decimal(str(row.get("balance") or 0))
+            locked = Decimal(str(row.get("locked") or 0))
+            if free > 0 or locked > 0:
+                print(f"{str(row.get('currency')):<8}{str(free):>22}{str(locked):>16}")
     elif args.cmd == "orders":
         print(json.dumps(c.orders(market=args.market), indent=1, ensure_ascii=False))
 
