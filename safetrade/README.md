@@ -83,6 +83,20 @@ python3 sell_prl.py --live --slices 6 --floor 1.35 --interval 15 --timeout 180
 
 产物：`logs/sell_prl_YYYYMMDD.log`（人类可读）+ `fills.jsonl`（每片 JSON 记录，用于对账：PRL 数量 / 价 / 成交状态）。
 
+## 3.5 策略（当前 Key 权限：交易对 prl-usdt / 总额度 100 PRL）
+
+原则：**每次只卖一小口，永不清零。**
+
+```bash
+python3 sell_prl.py --live --pct 20 --max-per-run 20 --slices 2 --floor 1.30
+```
+
+- 每次卖「可用量的 20%」且**单次硬上限 20 枚** → 98 枚可用时每次卖 ~19.6 枚（≈28 USDT），
+  5 次左右走完 100 枚额度；矿机新产出的 PRL 到账后自动纳入下一轮，不会清零。
+- 想更慢：`--pct 10`（每次 ~10 枚）。想留底仓：`--reserve 50`（可用里先留 50 枚不卖）。
+- `--max-per-run` 是防呆闸：万一天可用量突然变大，也不会被一次卖光。
+- `--floor` 是价格保护：执行时按最新盘口重算，最差价低于 floor 就这一片不卖。
+
 ## 4. 定时任务（每天固定时间卖）
 
 crontab（Mac / Linux）：

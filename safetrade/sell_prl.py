@@ -165,8 +165,10 @@ def main(argv=None) -> int:
     ap.add_argument("--live", action="store_true", help="真实下单（默认 dry-run）")
     ap.add_argument("--dry-run", action="store_true",
                     help="只预览不下单（默认行为；显式写上便于脚本化，且优先于 --live）")
-    ap.add_argument("--amount", type=float, default=None, help="要卖的 PRL 数量；缺省=可用余额-reserve")
-    ap.add_argument("--reserve", type=float, default=0.0, help="保留不卖的 PRL 数量")
+    ap.add_argument("--amount", type=float, default=None, help="要卖的 PRL 数量；缺省=可用余额按策略算")
+    ap.add_argument("--reserve", type=float, default=0.0, help="底仓：可用量里保留不卖的 PRL 数量")
+    ap.add_argument("--pct", type=float, default=None, help="按可卖量的百分比卖（如 20=卖两成）")
+    ap.add_argument("--max-per-run", type=float, default=None, help="单次最大卖出量（防一次卖完）")
     ap.add_argument("--slices", type=int, default=5, help="分片数（降低冲击成本）")
     ap.add_argument("--floor", type=float, default=None, help="最低可接受价（USDT/PRL），低于不卖")
     ap.add_argument("--interval", type=int, default=15, help="片间隔秒数")
@@ -185,15 +187,25 @@ def main(argv=None) -> int:
     log(f"PRL/USDT last={t.get('last')} best_bid={bid} best_ask={ask} 24h量={t.get('amount')} PRL")
 
     if args.amount is not None:
-        total = Decimal(str(args.amount))
+        total = q_amount(Decimal(str(args.amount)))
+        log(f"本次指定卖出 {total} PRL")
     else:
-        if not args.live and not client.key:
-            log("[error] 未指定 --amount 且无 API Key，无法读取余额。示例: --dry-run --amount 10000")
+        if not client.key:
+            log("[error] 未指定 --amount 且无 API Key，读不到余额。"
+                "示例: --dry-run --amount 20  或  配好 Key 后 --pct 20 --max-per-run 20")
             return 2
         bal = client.balance_of("prl")
-        avail = Decimal(str(bal.get("available") or 0))
-        total = q_amount(avail - Decimal(str(args.reserve)))
-        log(f"可用 PRL={avail}  保留={args.reserve}  本次计划卖出={total}")
+        free = Decimal(str(bal.get("available") or 0))
+        locked = Decimal(str(bal.get("locked") or 0))
+        sellable = max(free - Decimal(str(args.reserve)), Decimal("0"))
+        if args.pct is not None:
+            sellable = sellable * Decimal(str(args.pct)) / Decimal("100")
+        if args.max_per_run is not None:
+            sellable = min(sellable, Decimal(str(args.max_per_run)))
+        total = q_amount(sellable)
+        log(f"PRL 可用={free}  挂单冻结={locked}  底仓={args.reserve}  "
+            f"单次上限={args.max_per_run if args.max_per_run is not None else '无'}  "
+            f"百分比={args.pct if args.pct is not None else '无'}%  →  本次卖出 {total} PRL")
 
     if total < MIN_AMOUNT:
         log("可卖数量低于市场最小下单量，退出")
