@@ -37,7 +37,7 @@ trading_fees: maker 0.001 / taker 0.001   → 名义费率 0.1%
    pip install curl_cffi
    ```
 2. **不要用网页自动化**：`safetrade.com`（官网，非 api 子域）连真实浏览器都会被 CF 拦（"Sorry, you have been blocked"）。所有操作走 API。
-3. **出口网络要能到 `safe.trade:443`**：实测从 Mac（本地代理出口）可通；从第一集群跳板机 `ya` 直连 **TLS 握手被 reset（不可达）**。部署前先在目标机上跑一次 `python3 safetrade_client.py ticker prlusdt` 验证。
+3. **只在 Mac 上跑（需开 VPN）**：卖币脚本的出口 = Mac 的 VPN/代理，实测可通。**不要部署到 ya / ya2 等 IDC 集群**——集群没有 VPN，直连 `safe.trade:443` 会 TLS reset（实测不可达）；且卖币是交易侧的事，与集群运维无关。部署自检：`python3 safetrade_client.py ticker prlusdt`。
 
 ## 3. 快速开始
 
@@ -105,6 +105,7 @@ crontab（Mac / Linux）：
 ## 6. 现状 / 待办
 
 - [x] 确认 API 支持挂单 → 已实测端点存在且签名头被解析
+- [x] 运行宿主定为 **Mac（VPN 常开）**；ya/ya2 集群不参与卖币
 - [x] 客户端 + 分片卖币脚本（dry-run 跑通，读实时盘口出计划）
 - [ ] 拿到 API Key（用户网页端创建、绑 IP、只给交易权限）后：`me` / `balance` 自检 → 小额 `--live` 试跑
 - [ ] 定每天定时执行的时间点与 floor 策略（建议先观察一周盘口）
