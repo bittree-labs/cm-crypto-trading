@@ -1,5 +1,8 @@
 # SafeTrade (safe.trade) API —— PRL 自动卖币
 
+> **其他会话要动 SafeTrade 的话，先读 [`API_HANDOFF.md`](API_HANDOFF.md)**（端点/签名/费率/坑/工具/策略一页纸），
+> 或加载技能 `skill_view(name="safetrade-api-trading")`。
+
 > 结论先说：**SafeTrade 有官方 REST API v2，支持程序化挂单/撤单/查余额，PRL/USDT 现货可全自动卖出。**
 > 不需要网页自动化（官网 safetrade.com 有 Cloudflare，无头浏览器直接被拦；API 走 `safe.trade` 子域，指纹伪装后可通）。
 

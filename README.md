@@ -10,6 +10,8 @@ BitTree 加密货币交易系统
 - `market-data/` — 行情数据采集（Binance 现货）
 - `coinglass/` — CoinGlass BTC 合约监控（资金费/OI/多空比/爆仓 + 分级预警）
 - `safetrade/` — **SafeTrade (safe.trade) API 客户端 + PRL 自动卖币**（分片限价、floor 保护、默认 dry-run）
+  - 📄 **`safetrade/API_HANDOFF.md` = 给其他会话的交接文档**（端点/签名/费率/坑/策略，先读这个）
+  - 技能：`safetrade-api-trading`
 - `execution/` — 自动下单/代币销售机器人
 - `reports/` — 交易报告
 
