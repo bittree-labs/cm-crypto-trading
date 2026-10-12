@@ -146,6 +146,8 @@ def cmd_report(a) -> int:
         bits = []
         if r.get("source") == "api":
             bits.append("交易所 API 成交记录核实")
+        elif r.get("source") == "alloc":
+            bits.append("分配自交易所同一委托单（分配量与委托总量吻合）")
         else:
             bits.append("来源为人工记录，**待核**")
             open_items.append(f"第 {i} 笔（{r['date']}）：账户 API 未匹配到对应委托单，数量/净额待确认")
@@ -217,7 +219,8 @@ def main(argv=None) -> int:
     ad.add_argument("--net", type=float, default=None, help="客户净到账（缺省=名义−手续费）")
     ad.add_argument("--date", default=None, help="成交时间 CST，如 2026-09-19 01:06")
     ad.add_argument("--order-id", dest="order_id", default="")
-    ad.add_argument("--source", choices=["api", "customer"], default="api")
+    ad.add_argument("--source", choices=["api", "alloc", "customer"], default="api",
+                    help="api=API直接核实; alloc=分配自同一交易所委托; customer=人工记录")
     ad.add_argument("--note", default="")
     ad.add_argument("--rate", type=float, default=6.7, help="USDT→CNY 折算汇率")
     rp = sub.add_parser("report")
