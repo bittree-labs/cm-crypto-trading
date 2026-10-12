@@ -128,6 +128,8 @@ def cmd_report(a) -> int:
     lines.append("> 口径：净到账 = 名义成交额 − 平台交易手续费；手续费按 SafeTrade 现货费率 "
                  "**0.1%**（maker = taker = 0.1%，全站无档差）；标注「客户账单口径」的净额"
                  "已含提现等其他费用，与平台费存在差额。")
+    lines.append("> 历史笔次（2026-10 之前）按当时结算口径记录，已结清，不作事后精确核对；"
+                 "此后笔次以交易所 API 成交记录为准。")
     lines.append("")
     lines.append("| " + " | ".join(FIELDS) + " |")
     lines.append("|" + "---|" * len(FIELDS))
