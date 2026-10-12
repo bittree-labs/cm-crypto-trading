@@ -1,0 +1,6 @@
+{
+  "_note": "客户显示名映射：台账数据(ledgers/*.jsonl)始终记录 VIP 编号(client 字段)，仅对外产出(brief/report)使用显示名。新增客户在下面加一行即可。",
+  "vip5": "vip芳高",
+  "vip6": "vip何总",
+  "vip7": "vip林总"
+}

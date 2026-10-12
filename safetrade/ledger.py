@@ -43,6 +43,22 @@ def _f(x, nd=4) -> str:
     return f"{v:,.{nd}f}"
 
 
+CLIENTS_JSON = os.path.join(LEDGER_DIR, "clients.json")
+
+
+def display(client: str) -> str:
+    """对外显示名（vip7 → vip林总）；台账数据里始终保留 VIP 编号。"""
+    try:
+        with open(CLIENTS_JSON, "r", encoding="utf-8") as fh:
+            m = json.load(fh)
+        name = m.get(client.lower())
+        if name:
+            return str(name)
+    except Exception:
+        pass
+    return client.upper()
+
+
 def path_of(client: str) -> str:
     return os.path.join(LEDGER_DIR, f"{client}.jsonl")
 
@@ -105,7 +121,7 @@ def cmd_report(a) -> int:
 
     cq = cd = cg = cf = cnet = Decimal("0")
     lines = []
-    lines.append(f"# {a.client.upper()} 代出 PRL —— 结算明细与累计")
+    lines.append(f"# {display(a.client)} 代出 PRL —— 结算明细与累计")
     lines.append("")
     lines.append(f"> 生成时间：{datetime.now(CST).strftime('%Y-%m-%d %H:%M')} (CST)　|　"
                  f"平台：SafeTrade（safe.trade）PRL/USDT 现货")
@@ -191,7 +207,7 @@ def cmd_brief(a) -> int:
         print(f"[{a.client}] 台账为空，先用 add 追加记录")
         return 1
     cq = cnet = Decimal("0")
-    out = [f"{a.client.upper()} 代出 PRL（PRL/USDT 现货）", ""]
+    out = [f"{display(a.client)} 代出 PRL（PRL/USDT 现货）", ""]
     for i, r in enumerate(rows, 1):
         q, p = Decimal(r["qty"]), Decimal(r["price"])
         g, net = Decimal(r["gross"]), Decimal(r["net"])
