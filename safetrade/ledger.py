@@ -191,10 +191,8 @@ def cmd_brief(a) -> int:
         cut = g - net                      # 综合扣费（平台费 + 提现等）
         cq += q
         cnet += net
-        avg = cnet / cq
         price_s = f"{p.normalize():f}"
-        out.append(f"卖{i}：{q:,.0f} × {price_s} = {g:,.0f}u − {cut:,.2f} = "
-                   f"{net:,.2f}u　｜累计 {cq:,.0f}枚 / {cnet:,.2f}u / 均价 {avg:.4f}")
+        out.append(f"卖{i}：{q:,.0f} × {price_s} = {g:,.0f}u − {cut:,.2f} = {net:,.2f}u")
     out.append("")
     out.append(f"到手合计 {cnet:,.2f} USDT（PRL {cq:,.0f} 枚，均价 {cnet/cq:.4f}）")
     if a.rate:
