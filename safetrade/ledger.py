@@ -177,6 +177,37 @@ def cmd_report(a) -> int:
     return 0
 
 
+def cmd_brief(a) -> int:
+    """按用户口述风格输出简版（纯文本，方便直接复制到微信）。"""
+    rows = load(a.client)
+    if not rows:
+        print(f"[{a.client}] 台账为空，先用 add 追加记录")
+        return 1
+    cq = cnet = Decimal("0")
+    out = [f"{a.client.upper()} 代出 PRL（PRL/USDT 现货）", ""]
+    for i, r in enumerate(rows, 1):
+        q, p = Decimal(r["qty"]), Decimal(r["price"])
+        g, net = Decimal(r["gross"]), Decimal(r["net"])
+        cut = g - net                      # 综合扣费（平台费 + 提现等）
+        cq += q
+        cnet += net
+        avg = cnet / cq
+        price_s = f"{p.normalize():f}"
+        out.append(f"卖{i}：{q:,.0f} × {price_s} = {g:,.0f}u − {cut:,.2f} = "
+                   f"{net:,.2f}u　｜累计 {cq:,.0f}枚 / {cnet:,.2f}u / 均价 {avg:.4f}")
+    out.append("")
+    out.append(f"到手合计 {cnet:,.2f} USDT（PRL {cq:,.0f} 枚，均价 {cnet/cq:.4f}）")
+    if a.rate:
+        out.append(f"折算 ≈ {cnet*Decimal(str(a.rate)):,.0f} 元（按 {a.rate}）")
+    text = "\n".join(out) + "\n"
+    path = os.path.join(LEDGER_DIR, f"{a.client}-brief.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    print(text)
+    print(f"[简版已写入] {path}")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="客户代出 PRL 台账")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -194,8 +225,15 @@ def main(argv=None) -> int:
     rp = sub.add_parser("report")
     rp.add_argument("--client", required=True)
     rp.add_argument("--rate", type=float, default=6.7)
+    bp = sub.add_parser("brief")
+    bp.add_argument("--client", required=True)
+    bp.add_argument("--rate", type=float, default=6.7)
     args = ap.parse_args(argv)
-    return cmd_add(args) if args.cmd == "add" else cmd_report(args)
+    if args.cmd == "add":
+        return cmd_add(args)
+    if args.cmd == "brief":
+        return cmd_brief(args)
+    return cmd_report(args)
 
 
 if __name__ == "__main__":
