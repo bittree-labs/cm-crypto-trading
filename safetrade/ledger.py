@@ -179,6 +179,11 @@ def cmd_report(a) -> int:
     return 0
 
 
+def _t(x) -> str:
+    """千分位、去掉无意义的末尾零（2,574.00 → 2,574；639.60 → 639.6）。"""
+    return f"{Decimal(str(x)):,.2f}".rstrip("0").rstrip(".")
+
+
 def cmd_brief(a) -> int:
     """按用户口述风格输出简版（纯文本，方便直接复制到微信）。"""
     rows = load(a.client)
@@ -194,9 +199,9 @@ def cmd_brief(a) -> int:
         cq += q
         cnet += net
         price_s = f"{p.normalize():f}"
-        out.append(f"卖{i}：{q:,.0f} × {price_s} = {g:,.0f}u − {cut:,.2f} = {net:,.2f}u")
+        out.append(f"卖{i}：{q:,.0f} × {price_s} = {_t(g)}u − {_t(cut)} = {_t(net)}u")
     out.append("")
-    out.append(f"到手合计 {cnet:,.2f} USDT（PRL {cq:,.0f} 枚，均价 {cnet/cq:.4f}）")
+    out.append(f"到手合计 {_t(cnet)} USDT（PRL {cq:,.0f} 枚，均价 {cnet/cq:.4f}）")
     if a.rate:
         out.append(f"折算 ≈ {cnet*Decimal(str(a.rate)):,.0f} 元（按 {a.rate}）")
     text = "\n".join(out) + "\n"
