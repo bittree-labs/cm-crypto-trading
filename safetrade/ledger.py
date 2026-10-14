@@ -259,7 +259,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     if args.cmd == "add":
         return cmd_add(args)
-    if args.cmd == "brief":
+    if args.cmd in ("brief", "baozhang"):
         return cmd_brief(args)
     return cmd_report(args)
 
