@@ -104,6 +104,7 @@ def client_sales() -> dict[str, list[dict]]:
 def cmd_sync_deposits(a) -> int:
     load_env()
     c = SafeTrade(retries=4, backoff=2.0)
+    since = a.since or "2000-01-01"
     rows, page = [], 1
     while True:
         chunk = c._request("GET", "/trade/account/deposits",
@@ -119,6 +120,8 @@ def cmd_sync_deposits(a) -> int:
     for d in sorted(rows, key=lambda x: x.get("created_at") or ""):
         amt = Decimal(str(d.get("amount") or 0))
         if amt < CLIENT_MIN_AMOUNT:      # 粉尘 / 自营挖矿小额入金，不入客户账
+            continue
+        if str(d.get("created_at") or "")[:10] < since:   # 本轮代出业务起点之前的入金，不算客户账
             continue
         client = vip_from_amount(amt)
         src = "decimal"
@@ -225,7 +228,9 @@ def cmd_positions(a) -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="客户资产台账")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("sync-deposits")
+    sd = sub.add_parser("sync-deposits")
+    sd.add_argument("--since", default="2026-09-01",
+                    help="只把该日期之后的充值归入客户账（缺省 2026-09-01，本轮代出业务起点）")
     od = sub.add_parser("order")
     od.add_argument("--client", required=True)
     od.add_argument("--order-id", dest="order_id", required=True)
