@@ -181,6 +181,8 @@ def main(argv=None) -> int:
                     help="limit=贴盘口吃单(taker,默认); maker=挂 best_ask 等成交; "
                          "ladder=阶梯挂单卖(从 best_ask 起每档+1tick 铺 N 档); market=市价(慎用)")
     ap.add_argument("--levels", type=int, default=4, help="ladder 模式的档数")
+    ap.add_argument("--start", type=float, default=None,
+                    help="ladder 模式起始价（缺省=best_ask）；配 --levels 1 即为「按指定价挂单」")
     ap.add_argument("--maker-fallback", action="store_true",
                     help="maker 模式超时未成交时，剩余量撤单后转 taker 吃单")
     ap.add_argument("--max-slippage", type=float, default=0.05,
@@ -230,12 +232,14 @@ def main(argv=None) -> int:
         mkt = client.market(MARKET)
         step = Decimal(1).scaleb(-int(mkt["price_precision"]))
         per = q_amount(total / args.levels)
-        log(f"阶梯卖单计划（{args.levels} 档，起价 best_ask={ask}，每档 +{step}）")
+        base = ask if ask is not None else bid
+        if args.start is not None:
+            base = Decimal(str(args.start))
+        log(f"阶梯卖单计划（{args.levels} 档，起价 {base}，每档 +{step}）")
         for i in range(args.levels):
             amt = per if i < args.levels - 1 else q_amount(total - per * (args.levels - 1))
             if amt < MIN_AMOUNT:
                 continue
-            base = ask if ask is not None else bid
             price = q_price(base + step * i) if base is not None else None
             if price is None:
                 log(f"  #{i+1} 无报价，跳过")
