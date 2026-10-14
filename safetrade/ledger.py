@@ -121,7 +121,7 @@ def cmd_report(a) -> int:
 
     cq = cd = cg = cf = cnet = Decimal("0")
     lines = []
-    lines.append(f"# {display(a.client)} 代出 PRL —— 结算明细与累计")
+    lines.append(f"# {display(a.client)} 代出 {getattr(a, 'coin', 'PRL') or 'PRL'} —— 结算明细与累计")
     lines.append("")
     lines.append(f"> 生成时间：{datetime.now(CST).strftime('%Y-%m-%d %H:%M')} (CST)　|　"
                  f"平台：SafeTrade（safe.trade）PRL/USDT 现货")
@@ -209,7 +209,8 @@ def cmd_brief(a) -> int:
         print(f"[{a.client}] 台账为空，先用 add 追加记录")
         return 1
     cq = cnet = Decimal("0")
-    out = [f"{display(a.client)} 代出 PRL（PRL/USDT 现货）", ""]
+    coin = (a.coin or "PRL").upper()
+    out = [f"{display(a.client)} 代出 {coin}（{coin}/USDT 现货）", ""]
     for i, r in enumerate(rows, 1):
         q, p = Decimal(r["qty"]), Decimal(r["price"])
         g, net = Decimal(r["gross"]), Decimal(r["net"])
@@ -219,7 +220,7 @@ def cmd_brief(a) -> int:
         price_s = f"{p.normalize():f}"
         out.append(f"卖{i}：{q:,.0f} × {price_s} = {_t(g)}u − {_t(cut)} = {_t(net)}u")
     out.append("")
-    out.append(f"到手合计 {_t(cnet)} USDT（PRL {cq:,.0f} 枚，均价 {cnet/cq:.4f}）")
+    out.append(f"到手合计 {_t(cnet)} USDT（{coin} {cq:,.0f} 枚，均价 {cnet/cq:.4f}）")
     if a.rate:
         out.append(f"折算 ≈ {cnet*Decimal(str(a.rate)):,.0f} 元（按 {a.rate}）")
     text = "\n".join(out) + "\n"
@@ -249,9 +250,12 @@ def main(argv=None) -> int:
     rp = sub.add_parser("report")
     rp.add_argument("--client", required=True)
     rp.add_argument("--rate", type=float, default=6.7)
-    bp = sub.add_parser("brief")
+    rp.add_argument("--coin", default="PRL")
+    bp = sub.add_parser("brief", aliases=["baozhang"],
+                        help="报账（默认 PRL）：卖1/卖2 格式，可直接复制到微信")
     bp.add_argument("--client", required=True)
     bp.add_argument("--rate", type=float, default=6.7)
+    bp.add_argument("--coin", default="PRL", help="币种，默认 PRL（以后支持其他币再加）")
     args = ap.parse_args(argv)
     if args.cmd == "add":
         return cmd_add(args)
