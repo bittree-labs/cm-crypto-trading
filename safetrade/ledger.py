@@ -232,7 +232,8 @@ def cmd_brief(a) -> int:
         avg = (g / q) if q else Decimal("0")
         cq += q
         cnet += net
-        price_s = "%.4f" % avg if len(blk) > 1 else f"{Decimal(blk[0]['price']).normalize():f}"
+        price_s = (f"{avg:,.4f}".rstrip("0").rstrip(".") if len(blk) > 1
+                   else f"{Decimal(blk[0]['price']).normalize():f}")
         out.append(f"卖{i}：{_t(q)} × {price_s} = {_t(g)}u − {_t(cut)} = {_t(net)}u")
     out.append("")
     out.append(f"到手合计 {_t(cnet)} USDT（{coin} {cq:,.0f} 枚，均价 {cnet/cq:.4f}）")

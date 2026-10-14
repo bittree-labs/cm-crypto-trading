@@ -1,3 +1,3 @@
-{"client": "vip6", "order_id": "705343479", "side": "sell", "qty": "1373.3117", "price": "1.9", "state": "wait", "filled": "0", "ts": "2026-10-14 10:13", "note": "按客户要求 1.9 挂卖（原 1400.6 中 27.2883 已成交）"}
-{"client": "vip7", "order_id": "705343325", "side": "sell", "qty": "880.7", "price": "1.9", "state": "wait", "filled": "484.7017", "ts": "2026-10-14 10:13", "note": "按客户要求 1.9 挂卖"}
-{"client": "vip5", "order_id": "705343340", "side": "sell", "qty": "730.5", "price": "1.9", "state": "wait", "filled": "0", "ts": "2026-10-14 10:13", "note": "按客户要求 1.9 挂卖"}
+{"client": "vip6", "order_id": "705343479", "side": "sell", "qty": "1373.3117", "price": "1.9", "state": "done", "filled": "1373.3117", "ts": "2026-10-14 10:13", "note": "按客户要求 1.9 挂卖（原 1400.6 中 27.2883 已成交）"}
+{"client": "vip7", "order_id": "705343325", "side": "sell", "qty": "880.7", "price": "1.9", "state": "done", "filled": "880.7", "ts": "2026-10-14 10:13", "note": "按客户要求 1.9 挂卖"}
+{"client": "vip5", "order_id": "705343340", "side": "sell", "qty": "730.5", "price": "1.9", "state": "done", "filled": "730.5", "ts": "2026-10-14 10:13", "note": "按客户要求 1.9 挂卖"}
