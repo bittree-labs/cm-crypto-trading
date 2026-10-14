@@ -177,8 +177,10 @@ def main(argv=None) -> int:
     ap.add_argument("--floor", type=float, default=None, help="最低可接受价（USDT/PRL），低于不卖")
     ap.add_argument("--interval", type=int, default=15, help="片间隔秒数")
     ap.add_argument("--timeout", type=int, default=180, help="单片挂单等待成交秒数，超时撤单")
-    ap.add_argument("--mode", choices=["limit", "maker", "market"], default="limit",
-                    help="limit=按盘口限价吃单(taker,默认); maker=挂 best_ask 等成交; market=市价(慎用)")
+    ap.add_argument("--mode", choices=["limit", "maker", "market", "ladder"], default="limit",
+                    help="limit=贴盘口吃单(taker,默认); maker=挂 best_ask 等成交; "
+                         "ladder=阶梯挂单卖(从 best_ask 起每档+1tick 铺 N 档); market=市价(慎用)")
+    ap.add_argument("--levels", type=int, default=4, help="ladder 模式的档数")
     ap.add_argument("--maker-fallback", action="store_true",
                     help="maker 模式超时未成交时，剩余量撤单后转 taker 吃单")
     ap.add_argument("--max-slippage", type=float, default=0.05,
@@ -224,6 +226,39 @@ def main(argv=None) -> int:
         return 0
 
     floor = None if args.floor is None else Decimal(str(args.floor))
+    if args.mode == "ladder":
+        mkt = client.market(MARKET)
+        step = Decimal(1).scaleb(-int(mkt["price_precision"]))
+        per = q_amount(total / args.levels)
+        log(f"阶梯卖单计划（{args.levels} 档，起价 best_ask={ask}，每档 +{step}）")
+        for i in range(args.levels):
+            amt = per if i < args.levels - 1 else q_amount(total - per * (args.levels - 1))
+            if amt < MIN_AMOUNT:
+                continue
+            base = ask if ask is not None else bid
+            price = q_price(base + step * i) if base is not None else None
+            if price is None:
+                log(f"  #{i+1} 无报价，跳过")
+                continue
+            if floor is not None and price < floor:
+                log(f"  #{i+1} 价 {price} 低于 floor {floor}，跳过")
+                continue
+            log(f"  #{i+1}/{args.levels} 挂 {amt} PRL @ {price}（≈{amt * price:.2f}u）")
+            if not args.live:
+                continue
+            o = client.create_order(MARKET, "sell", float(amt), float(price))
+            with open(FILL_LOG, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"ts": datetime.now(timezone.utc).isoformat(),
+                                     "mode": "ladder", "order_id": o.get("id"),
+                                     "planned_amount": str(amt), "planned_price": str(price),
+                                     "filled": "0", "state": o.get("state")},
+                                    ensure_ascii=False) + "\n")
+            log(f"      已挂 id={o.get('id')} state={o.get('state')}")
+            time.sleep(args.interval)
+        log("[DRY-RUN] 阶梯计划如上，未下单。" if not args.live else
+            "阶梯挂单结束（未成交的留在盘口，用 safetrade_client.py orders 查看 / 撤单）")
+        return 0
+
     plan = plan_slices(client, total, args.slices, floor)
     est_sum = sum(p["est_usdt"] for p in plan if p["price"] is not None)
     est_amt = sum(p["amount"] for p in plan if p["price"] is not None)
@@ -231,6 +266,40 @@ def main(argv=None) -> int:
         + (f"，均 {est_sum / est_amt:.4f}" if est_amt else ""))
     for i, p in enumerate(plan, 1):
         log(f"  #{i} {p['amount']} PRL @ {p['price']} -> ~{p['est_usdt']:.2f} USDT {p['note']}")
+
+    if args.mode == "ladder":
+        # 挂单卖（阶梯）：从 best_ask 起每档 +1 tick 铺 N 档，全部当 maker 挂着等买盘
+        m = client.market(MARKET)
+        step = Decimal(1).scaleb(-int(m["price_precision"]))
+        per = q_amount(total / args.levels)
+        for i in range(args.levels):
+            amt = per if i < args.levels - 1 else q_amount(total - per * (args.levels - 1))
+            if amt < MIN_AMOUNT:
+                continue
+            bid_n, ask_n, _ = client.best_bid_ask(MARKET, depth_ok=5)
+            base = ask_n if ask_n is not None else bid_n
+            if base is None:
+                log(f"  #{i+1} 无报价，跳过")
+                continue
+            price = q_price(base + step * i)
+            if floor is not None and price < floor:
+                log(f"  #{i+1} 价 {price} 低于 floor {floor}，跳过")
+                continue
+            log(f"  #{i+1}/{args.levels} 挂 {amt} PRL @ {price}（≈{amt * price:.2f}u）")
+            if not args.live:
+                continue
+            o = client.create_order(MARKET, "sell", float(amt), float(price))
+            with open(FILL_LOG, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"ts": datetime.now(timezone.utc).isoformat(),
+                                     "mode": "ladder", "order_id": o.get("id"),
+                                     "planned_amount": str(amt), "planned_price": str(price),
+                                     "filled": "0", "state": o.get("state")},
+                                    ensure_ascii=False) + "\n")
+            log(f"      已挂 id={o.get('id')} state={o.get('state')}")
+            time.sleep(args.interval)
+        log("[DRY-RUN] 阶梯计划如上，未下单。" if not args.live else
+            "阶梯挂单结束（未成交的留在盘口，用 safetrade_client.py orders 查看 / 撤单）")
+        return 0
 
     if not args.live:
         log("[DRY-RUN] 未下单。确认无误后加 --live 执行。")
