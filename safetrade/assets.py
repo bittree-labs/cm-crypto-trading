@@ -81,6 +81,15 @@ def display(client: str) -> str:
     return str(clients().get(client, client.upper()))
 
 
+def baseline() -> str:
+    """客户资产起算日（clients.json 的 _baseline）。"""
+    try:
+        with open(CLIENTS, "r", encoding="utf-8") as fh:
+            return str(json.load(fh).get("_baseline") or "2000-01-01")
+    except Exception:
+        return "2000-01-01"
+
+
 def vip_from_amount(amount) -> str | None:
     """小数位=VIP 编号：880.7 → vip7；1400.60 → 不识别（尾零无意义）。"""
     s = f"{Decimal(str(amount)):f}"
@@ -104,7 +113,7 @@ def client_sales() -> dict[str, list[dict]]:
 def cmd_sync_deposits(a) -> int:
     load_env()
     c = SafeTrade(retries=4, backoff=2.0)
-    since = a.since or "2000-01-01"
+    since = a.since or baseline()
     rows, page = [], 1
     while True:
         chunk = c._request("GET", "/trade/account/deposits",
@@ -169,22 +178,76 @@ def cmd_order(a) -> int:
            "qty": f"{_q(a.qty):f}", "price": f"{_q(a.price, 4):f}",
            "state": a.state, "filled": f"{_q(a.filled):f}",
            "ts": datetime.now(CST).strftime("%Y-%m-%d %H:%M"), "note": a.note or ""}
+    # 同一 order_id 视为同一条记录：覆盖更新（幂等），否则追加
+    recs = load_jsonl(ORDERS)
+    for i, r in enumerate(recs):
+        if str(r.get("order_id")) == rec["order_id"]:
+            rec["ts"] = r.get("ts") or rec["ts"]
+            recs[i] = rec
+            with open(ORDERS, "w", encoding="utf-8") as fh:
+                for x in recs:
+                    fh.write(json.dumps(x, ensure_ascii=False) + "\n")
+            print(f"已更新挂单：{display(a.client)} 卖 {rec['qty']} PRL @ {rec['price']} "
+                  f"（id={rec['order_id']}, 已成交 {rec['filled']}, state={rec['state']}）")
+            return 0
     append_jsonl(ORDERS, rec)
     print(f"已登记挂单：{display(a.client)} 卖 {rec['qty']} PRL @ {rec['price']} "
           f"（id={rec['order_id']}, state={rec['state']}）")
     return 0
 
 
+def refresh_orders_from_api(c: SafeTrade) -> None:
+    """用交易所实时状态刷新 orders.jsonl 的 state/filled，并提示需要登记为卖出的新成交。"""
+    recs = load_jsonl(ORDERS)
+    if not recs:
+        return
+    changed = False
+    print("\n--- 刷新挂单状态（交易所实时）---")
+    for r in recs:
+        try:
+            o = c.order(int(r["order_id"]))
+        except SafeTradeError as e:
+            print(f"  id={r['order_id']} 查询失败: {e}")
+            continue
+        filled = Decimal(str(o.get("filled_amount") or 0))
+        prev = Decimal(str(r.get("filled") or 0))
+        newly = filled - prev
+        r["state"] = o.get("state") or r.get("state")
+        r["qty"] = str(o.get("origin_amount"))
+        r["price"] = str(o.get("price"))
+        r["filled"] = str(filled)
+        changed = True
+        tag = display(r["client"])
+        note = ""
+        if newly > 0:
+            note = f"  ⚠️ 新成交 {newly} PRL（需登记为卖出，均价 {o.get('avg_price')}）"
+        print(f"  id={r['order_id']} {tag:<8} {r['qty']} @ {r['price']} "
+              f"已成交={filled} state={r['state']}{note}")
+    if changed:
+        with open(ORDERS, "w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
 # ------------------------------------------------------------------ positions
 
 def cmd_positions(a) -> int:
-    deps = load_jsonl(DEPOSITS)
-    orders = load_jsonl(ORDERS)
-    sales = client_sales()
+    base = baseline()
+    c = None
+    if a.check:
+        load_env()
+        c = SafeTrade(retries=4, backoff=2.0)
+        refresh_orders_from_api(c)
+    deps = [d for d in load_jsonl(DEPOSITS) if str(d.get("created_at") or "")[:10] >= base]
+    orders = [o for o in load_jsonl(ORDERS) if str(o.get("ts") or "")[:10] >= base]
+    all_sales = client_sales()
+    sales = {c: [r for r in (all_sales.get(c) or []) if str(r.get("date") or "")[:10] >= base]
+             for c in all_sales}
     ids = sorted(set(list(sales.keys()) + [d["client"] for d in deps]
                      + [o["client"] for o in orders]))
     print("客户资产台账（代出 PRL）")
-    print(f"生成时间：{datetime.now(CST).strftime('%Y-%m-%d %H:%M')} CST")
+    print(f"生成时间：{datetime.now(CST).strftime('%Y-%m-%d %H:%M')} CST　|　"
+          f"起算日：{base}（此前的入金与成交属历史，不计入持仓）")
     print()
     hdr = f"{'客户':<10}{'累计充值':>14}{'已卖出':>14}{'挂单中':>14}{'剩余持仓':>14}{'已到手USDT':>14}"
     print(hdr)
@@ -205,11 +268,21 @@ def cmd_positions(a) -> int:
     print("-" * len(hdr))
     print(f"{'合计':<10}{_f(tot_dep, 4):>14}{_f(tot_sold, 4):>14}{_f(tot_rest, 4):>14}"
           f"{_f(tot_hld, 4):>14}{_f(tot_usdt, 2):>14}")
-    print("\n注：剩余持仓 = 累计充值 − 已卖出 − 挂单中；历史充值按「小数位=VIP编号」或与卖出数量匹配入账。")
+    print("\n注：剩余持仓 = 累计充值 − 已卖出 − 挂单中；充值按「小数位=VIP编号」入账。")
+    print("\n历史全量成交（含起算日之前的，仅供汇报口径）：")
+    for cid in ids:
+        recs = all_sales.get(cid) or []
+        hq = sum((Decimal(r["qty"]) for r in recs), Decimal("0"))
+        hu = sum((Decimal(r["net"]) for r in recs), Decimal("0"))
+        hg = sum((Decimal(r["gross"]) for r in recs), Decimal("0"))
+        if hq:
+            print(f"  {display(cid):<10} {_f(hq, 4):>14} PRL，到手 {_f(hu, 2):>12} USDT"
+                  f"（均价 {hu / hq:.4f}）")
 
     if a.check:
-        load_env()
-        c = SafeTrade(retries=4, backoff=2.0)
+        if c is None:
+            load_env()
+            c = SafeTrade(retries=4, backoff=2.0)
         b = c.balance_of("prl")
         free, locked = Decimal(b["available"]), Decimal(b["locked"])
         live = free + locked
@@ -229,8 +302,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="客户资产台账")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sd = sub.add_parser("sync-deposits")
-    sd.add_argument("--since", default="2026-09-01",
-                    help="只把该日期之后的充值归入客户账（缺省 2026-09-01，本轮代出业务起点）")
+    sd.add_argument("--since", default=None,
+                    help="只把该日期之后的充值归入客户账（缺省=clients.json 的 _baseline 起算日）")
     od = sub.add_parser("order")
     od.add_argument("--client", required=True)
     od.add_argument("--order-id", dest="order_id", required=True)
