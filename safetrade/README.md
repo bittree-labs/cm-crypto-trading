@@ -215,6 +215,34 @@ tail -f logs/auto.log                     # 决策日志
 
 **要真做波段（低买高卖）还缺两样**：账户里留 USDT + Key 允许买入（当前 Key 只授权 prl-usdt，且我们一直只卖）。
 
+## 10. 客户资产台账（代出 PRL + 归集地址）
+
+**客户充值归集地址（SafeTrade，pearl-tokens 网络）**
+
+```
+prl1p2qfhcgzc7c3xa39ykwqejm2e2vaw6ddm8j4ejw9hcqnledaggulq6yfmg9
+```
+vip5~vip7 需要代卖的 PRL 都充到这里；链上核验见 `assets.py tx --txid …`。
+
+**归属判定（按顺序）**
+
+1. **小数位 = VIP 编号**（2026-10-14 起，唯一稳定标识）：`880.7→vip7`、`730.5→vip5`、`1400.6→vip6`
+2. 与卖出数量匹配（±3%、±5 天）—— 仅用于历史回溯
+3. **链上地址核验**（辅助留痕，不做归属）：解析 txid 的来源/到账地址，确认落在归集地址；
+   缓存于 `ledgers/tx_addr_cache.json`
+
+> ⚠️ 实测 20 笔 PRL 充值来自 **20 个不同来源地址** → 来源地址不能用来识别客户，归属只认小数位规则。
+
+**基准日**：`clients.json` 的 `_baseline = 2026-10-14`；此前入金/成交只留在成交台账供汇报，不计入持仓。
+
+```bash
+python3 assets.py sync-deposits          # 拉充值 → 按规则入账（只收 PRL，txid 幂等）+ 链上地址留痕
+python3 assets.py positions --check      # 客户持仓 + 自动刷新挂单成交 + 与交易所余额对账
+python3 assets.py order --client vip6 --order-id … --qty … --price …
+python3 assets.py tx --txid <txid>       # 单笔链上核验（来源/到账/归属）
+python3 ledger.py baozhang --client vip5 # 报账（卖1/卖2 格式，微信可直发）
+```
+
 ## 9. 现状 / 待办
 
 - [x] 确认 API 支持挂单 → 已实测端点存在且签名头被解析

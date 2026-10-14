@@ -41,6 +41,48 @@ CST = timezone(timedelta(hours=8))
 OPEN_STATES = ("wait", "pending")
 CLIENT_MIN_AMOUNT = Decimal("100")   # 低于此额度视为粉尘/自营挖矿入金，不进客户账
 MATCH_TOL = Decimal("0.03")          # 数量匹配容差（3%）
+EXPLORER = "https://explorer.pearlresearch.ai/tx/"
+CACHE = os.path.join(L, "tx_addr_cache.json")
+
+
+def explorer_addrs(txid: str, refresh: bool = False) -> dict:
+    """用 Pearl 区块浏览器解析交易的 prl1 地址：{'from': [...], 'to': [...]}。
+
+    结果缓存在 ledgers/tx_addr_cache.json（避免重复请求）。
+    """
+    try:
+        with open(CACHE, "r", encoding="utf-8") as fh:
+            cache = json.load(fh)
+    except Exception:
+        cache = {}
+    if txid in cache and not refresh:
+        return cache[txid]
+    out: dict = {"from": [], "to": []}
+    try:
+        from curl_cffi import requests as cr
+        dep = deposit_address()
+        r = cr.get(f"{EXPLORER}{txid}", impersonate="safari17_0", timeout=30)
+        addrs = sorted(set(re.findall(r"prl1[a-z0-9]{50,70}", r.text)))
+        for a in addrs:
+            (out["to"] if a == dep else out["from"]).append(a)
+    except Exception as e:
+        out["error"] = str(e)[:120]
+    cache[txid] = out
+    try:
+        with open(CACHE, "w", encoding="utf-8") as fh:
+            json.dump(cache, fh, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
+    return out
+
+
+def deposit_address() -> str | None:
+    """客户充值用的 SafeTrade 归集地址（clients.json 的 _deposit_address）。"""
+    try:
+        with open(CLIENTS, "r", encoding="utf-8") as fh:
+            return json.load(fh).get("_deposit_address")
+    except Exception:
+        return None
 
 
 def _q(x, nd=8) -> Decimal:
@@ -128,6 +170,8 @@ def cmd_sync_deposits(a) -> int:
     added = 0
     for d in sorted(rows, key=lambda x: x.get("created_at") or ""):
         amt = Decimal(str(d.get("amount") or 0))
+        if str(d.get("currency", "")).lower() != "prl":   # 客户台账只记 PRL 充值
+            continue
         if amt < CLIENT_MIN_AMOUNT:      # 粉尘 / 自营挖矿小额入金，不入客户账
             continue
         if str(d.get("created_at") or "")[:10] < since:   # 本轮代出业务起点之前的入金，不算客户账
@@ -158,15 +202,20 @@ def cmd_sync_deposits(a) -> int:
                 client, src = best[1], f"match_sale({best[2]})"
         if d.get("txid") in have or client is None:
             continue     # 无法归属客户（自营/公司入金）→ 不记入客户台账
+        addrs = explorer_addrs(str(d.get("txid")))
+        to_addr = (addrs.get("to") or [None])[0]
+        from_addr = (addrs.get("from") or [None])[0]
         append_jsonl(DEPOSITS, {
             "client": client, "amount": f"{amt:f}", "deposit_id": d.get("id"),
             "txid": d.get("txid"), "created_at": d.get("created_at"),
             "completed_at": d.get("completed_at"), "fee": d.get("fee"),
-            "source": src,
+            "source": src, "from_address": from_addr, "to_address": to_addr,
+            "to_ok": (to_addr == deposit_address()) if to_addr else None,
         })
         have.add(d.get("txid"))
         added += 1
-        print(f"  + {amt:>12} PRL → {display(client):<8} ({src})  {str(d.get('txid'))[:12]}…")
+        print(f"  + {amt:>12} PRL → {display(client):<8} ({src})  {str(d.get('txid'))[:12]}…"
+              f"  来自 {str(from_addr)[:20]}…  到账地址{'OK' if to_addr == deposit_address() else '?'}")
     print(f"新增入账 {added} 条 → {DEPOSITS}")
     return 0
 
@@ -230,6 +279,26 @@ def refresh_orders_from_api(c: SafeTrade) -> None:
 
 
 # ------------------------------------------------------------------ positions
+
+def cmd_tx(a) -> int:
+    """查一笔链上交易/充值：来源地址、到账地址、是否归集地址、归属客户。"""
+    e = explorer_addrs(a.txid, refresh=a.refresh)
+    dep = deposit_address()
+    rec = next((d for d in load_jsonl(DEPOSITS) if d.get("txid") == a.txid), None)
+    print(f"txid: {a.txid}")
+    print(f"  到账地址: {(e.get('to') or ['(未知)'])[0]}"
+          f"{'  ✔ 即客户归集地址' if dep and dep in (e.get('to') or []) else ''}")
+    for i, f in enumerate(e.get("from") or ["(未解析到来源地址)"]):
+        print(f"  来源地址[{i}]: {f}")
+    if e.get("error"):
+        print(f"  解析错误: {e['error']}")
+    if rec:
+        print(f"  台账记录: {rec['amount']} PRL → {display(rec['client'])}"
+              f"（{rec.get('source')}，{str(rec.get('created_at'))[:19]}）")
+    else:
+        print("  台账记录: 无（未入客户账）")
+    return 0
+
 
 def cmd_positions(a) -> int:
     base = baseline()
@@ -315,11 +384,16 @@ def main(argv=None) -> int:
     od.add_argument("--note", default="")
     ps = sub.add_parser("positions")
     ps.add_argument("--check", action="store_true", help="与交易所实时余额对账")
+    tx = sub.add_parser("tx", help="按 txid 查链上来源/到账地址与客户归属")
+    tx.add_argument("--txid", required=True)
+    tx.add_argument("--refresh", action="store_true", help="忽略缓存重新解析")
     args = ap.parse_args(argv)
     if args.cmd == "sync-deposits":
         return cmd_sync_deposits(args)
     if args.cmd == "order":
         return cmd_order(args)
+    if args.cmd == "tx":
+        return cmd_tx(args)
     return cmd_positions(args)
 
 

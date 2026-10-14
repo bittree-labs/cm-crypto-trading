@@ -2,6 +2,8 @@
   "_note": "客户显示名映射 + 资产台账基准日。台账数据(ledgers/*.jsonl)始终记录 VIP 编号，仅对外产出使用显示名。",
   "_baseline": "2026-10-14",
   "_baseline_note": "客户资产从该日起算：充值按「小数位=VIP编号」入账；该日之前的入金/成交属历史，不计入资产持仓（历史只留在成交台账里供汇报）。",
+  "_deposit_address": "prl1p2qfhcgzc7c3xa39ykwqejm2e2vaw6ddm8j4ejw9hcqnledaggulq6yfmg9",
+  "_deposit_address_note": "vip5~vip7 要代卖的 PRL 都充到这个 SafeTrade 归集地址（pearl-tokens 网络）。链上核验：assets.explorer_addrs(txid) 解析来源/到账地址，缓存于 ledgers/tx_addr_cache.json。",
   "vip5": "vip芳高",
   "vip6": "vip何总",
   "vip7": "vip林总"
