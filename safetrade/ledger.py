@@ -99,6 +99,7 @@ def cmd_add(a) -> int:
         "order_id": a.order_id or "",
         "source": a.source,
         "note": a.note or "",
+        "group": a.group or "",
     }
     append(rec)
     rows = load(a.client)
@@ -203,22 +204,36 @@ def _t(x) -> str:
 
 
 def cmd_brief(a) -> int:
-    """按用户口述风格输出简版（纯文本，方便直接复制到微信）。"""
+    """按用户口述风格输出简版（纯文本，方便直接复制到微信）。
+
+    同一 `group` 的多笔实际成交，汇报时只出一条（数量合计 × 名义均价 = 名义额 − 扣费 = 到手）。
+    """
     rows = load(a.client)
     if not rows:
         print(f"[{a.client}] 台账为空，先用 add 追加记录")
         return 1
-    cq = cnet = Decimal("0")
     coin = (a.coin or "PRL").upper()
+    # 分组：连续且 group 相同的记录合并为一条汇报
+    blocks: list[list[dict]] = []
+    for r in rows:
+        g = r.get("group")
+        if g and blocks and blocks[-1][0].get("group") == g:
+            blocks[-1].append(r)
+        else:
+            blocks.append([r])
+
+    cq = cnet = Decimal("0")
     out = [f"{display(a.client)} 代出 {coin}（{coin}/USDT 现货）", ""]
-    for i, r in enumerate(rows, 1):
-        q, p = Decimal(r["qty"]), Decimal(r["price"])
-        g, net = Decimal(r["gross"]), Decimal(r["net"])
-        cut = g - net                      # 综合扣费（平台费 + 提现等）
+    for i, blk in enumerate(blocks, 1):
+        q = sum((Decimal(r["qty"]) for r in blk), Decimal("0"))
+        g = sum((Decimal(r["gross"]) for r in blk), Decimal("0"))
+        net = sum((Decimal(r["net"]) for r in blk), Decimal("0"))
+        cut = g - net
+        avg = (g / q) if q else Decimal("0")
         cq += q
         cnet += net
-        price_s = f"{p.normalize():f}"
-        out.append(f"卖{i}：{q:,.0f} × {price_s} = {_t(g)}u − {_t(cut)} = {_t(net)}u")
+        price_s = "%.4f" % avg if len(blk) > 1 else f"{Decimal(blk[0]['price']).normalize():f}"
+        out.append(f"卖{i}：{_t(q)} × {price_s} = {_t(g)}u − {_t(cut)} = {_t(net)}u")
     out.append("")
     out.append(f"到手合计 {_t(cnet)} USDT（{coin} {cq:,.0f} 枚，均价 {cnet/cq:.4f}）")
     if a.rate:
@@ -246,6 +261,8 @@ def main(argv=None) -> int:
     ad.add_argument("--source", choices=["api", "alloc", "customer"], default="api",
                     help="api=API直接核实; alloc=分配自同一交易所委托; customer=人工记录")
     ad.add_argument("--note", default="")
+    ad.add_argument("--group", default="",
+                    help="汇报归组：同一 group 的多笔实际成交，报账时只合成一条")
     ad.add_argument("--rate", type=float, default=6.7, help="USDT→CNY 折算汇率")
     rp = sub.add_parser("report")
     rp.add_argument("--client", required=True)
