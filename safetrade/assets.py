@@ -352,18 +352,22 @@ def cmd_positions(a) -> int:
         if c is None:
             load_env()
             c = SafeTrade(retries=4, backoff=2.0)
-        b = c.balance_of("prl")
-        free, locked = Decimal(b["available"]), Decimal(b["locked"])
-        live = free + locked
-        print("\n--- 与交易所实时对账 ---")
-        print(f"  账户 PRL 总量 = {_f(live, 4)}（可用 {_f(free,4)} + 冻结 {_f(locked,4)}）")
-        print(f"  客户持仓+挂单 = {_f(tot_hld + tot_rest, 4)}")
-        print(f"  账户自有/未分配 = {_f(live - (tot_hld + tot_rest), 4)}")
         opens = c.orders("prlusdt", state=list(OPEN_STATES)) or []
-        print(f"  交易所未成交卖单 {len(opens)} 张：")
+        print(f"\n交易所未成交卖单 {len(opens)} 张：")
         for o in opens:
             tag = next((x["client"] for x in orders if x["order_id"] == str(o["id"])), "?")
-            print(f"    id={o['id']} {o['origin_amount']} @ {o['price']} → {display(tag)}")
+            print(f"  id={o['id']} {o['origin_amount']} @ {o['price']} → {display(tag)}")
+
+    if getattr(a, "recon", False):
+        # 账户余额仅作参考：账户余额/提现由用户灵活操作，不纳入台账
+        if c is None:
+            load_env()
+            c = SafeTrade(retries=4, backoff=2.0)
+        b = c.balance_of("prl")
+        free, locked = Decimal(b["available"]), Decimal(b["locked"])
+        print("\n--- 账户余额参考（不记账，仅供比对）---")
+        print(f"  账户 PRL：可用 {_f(free,4)} + 冻结 {_f(locked,4)} = {_f(free+locked,4)}")
+        print(f"  客户挂单合计 {_f(tot_rest, 4)}　客户持仓合计 {_f(tot_hld, 4)}")
     return 0
 
 
@@ -383,7 +387,9 @@ def main(argv=None) -> int:
     od.add_argument("--filled", type=float, default=0.0)
     od.add_argument("--note", default="")
     ps = sub.add_parser("positions")
-    ps.add_argument("--check", action="store_true", help="与交易所实时余额对账")
+    ps.add_argument("--check", action="store_true", help="刷新挂单成交状态 + 列出未成交挂单")
+    ps.add_argument("--recon", action="store_true",
+                    help="额外打印账户余额作参考（余额/提现不记账，仅供比对）")
     tx = sub.add_parser("tx", help="按 txid 查链上来源/到账地址与客户归属")
     tx.add_argument("--txid", required=True)
     tx.add_argument("--refresh", action="store_true", help="忽略缓存重新解析")

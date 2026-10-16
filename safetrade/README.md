@@ -235,9 +235,12 @@ vip5~vip7 需要代卖的 PRL 都充到这里；链上核验见 `assets.py tx --
 
 **基准日**：`clients.json` 的 `_baseline = 2026-10-14`；此前入金/成交只留在成交台账供汇报，不计入持仓。
 
+> **不记录账户余额与提现**（用户灵活操作）：台账只维护「客户维度」的充值与卖出；
+> 账户余额仅在 `positions --recon` 时打印作参考，不参与记账、不做差异预警。
+
 ```bash
 python3 assets.py sync-deposits          # 拉充值 → 按规则入账（只收 PRL，txid 幂等）+ 链上地址留痕
-python3 assets.py positions --check      # 客户持仓 + 自动刷新挂单成交 + 与交易所余额对账
+python3 assets.py positions --check      # 客户持仓 + 自动刷新挂单成交 + 列出未成交挂单
 python3 assets.py order --client vip6 --order-id … --qty … --price …
 python3 assets.py tx --txid <txid>       # 单笔链上核验（来源/到账/归属）
 python3 ledger.py baozhang --client vip5 # 报账（卖1/卖2 格式，微信可直发）
